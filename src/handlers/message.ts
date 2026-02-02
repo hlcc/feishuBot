@@ -29,12 +29,14 @@ export class MessageHandler {
       if (messageType === 'text') {
         const parsed = JSON.parse(message.content);
         content = parsed.text || '';
+        logger.info(`Parsed text content: "${content}"`);
 
         // Handle mentions - remove bot mention from content
         if (message.mentions) {
           for (const mention of message.mentions) {
             content = content.replace(mention.key, '').trim();
           }
+          logger.info(`Content after removing mentions: "${content}"`);
         }
       } else if (messageType === 'image') {
         const parsed = JSON.parse(message.content);
@@ -67,8 +69,11 @@ export class MessageHandler {
 
       // Skip empty messages
       if (!content.trim() && !imageBase64) {
+        logger.info('Skipping empty message');
         return;
       }
+
+      logger.info(`Building chat request with content: "${content.substring(0, 50)}..."`);
 
       // Build user message
       const userMessage: OpenClawChatMessage = {
@@ -98,13 +103,11 @@ export class MessageHandler {
 
       const fullMessages = [systemMessage, ...messages];
 
-      // Send typing indicator (optional - just reply with a status)
-      logger.debug('Sending request to OpenClaw...');
-
       // Call OpenClaw
+      logger.info('Calling OpenClaw chat API...');
       let response: string;
       try {
-        response = await openclawService.chat(fullMessages);
+        response = await openclawService.chat(fullMessages, { userId, chatId });
       } catch (error) {
         logger.error('Failed to get response from OpenClaw:', error);
         await feishuService.replyText(

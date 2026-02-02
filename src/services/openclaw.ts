@@ -222,18 +222,28 @@ class OpenClawService {
 
   // ========== Chat via HTTP ==========
 
-  async chatViaHttp(messages: OpenClawChatMessage[], model?: string): Promise<string> {
+  async chatViaHttp(
+    messages: OpenClawChatMessage[],
+    options?: { userId?: string; chatId?: string; model?: string }
+  ): Promise<string> {
     const httpUrl = config.openclawGatewayUrl
       .replace('ws://', 'http://')
       .replace('wss://', 'https://');
+
+    // Build session key from chatId + userId for stable sessions
+    const sessionKey = options?.chatId && options?.userId
+      ? `agent:main:feishu:${options.chatId}:${options.userId}`
+      : undefined;
 
     try {
       const response = await axios.post(
         `${httpUrl}/v1/chat/completions`,
         {
-          model: model || 'openclaw:main',
+          model: options?.model || 'openclaw:main',
           messages,
           stream: false,
+          // user field derives a stable session key in OpenClaw
+          user: options?.userId || 'feishu-user',
         },
         {
           headers: {
@@ -242,6 +252,10 @@ class OpenClawService {
               Authorization: `Bearer ${config.openclawAuthToken}`,
             }),
             'x-openclaw-agent-id': 'main',
+            'x-openclaw-message-channel': 'feishu',
+            ...(sessionKey && {
+              'x-openclaw-session-key': sessionKey,
+            }),
           },
           timeout: 120000,
         }
@@ -254,19 +268,20 @@ class OpenClawService {
       throw new Error('Invalid HTTP chat response');
     } catch (error: unknown) {
       if (axios.isAxiosError(error) && error.response?.status === 405) {
-        logger.error('OpenClaw HTTP chat completions endpoint is disabled. Please enable it in OpenClaw config: gateway.http.endpoints.chatCompletions.enabled = true');
+        logger.error('OpenClaw HTTP chat completions endpoint is disabled. Enable it in config: gateway.http.endpoints.chatCompletions.enabled = true');
         throw new Error('OpenClaw chat completions endpoint not enabled');
       }
       throw error;
     }
   }
 
-  // ========== Chat (auto fallback) ==========
+  // ========== Chat (unified) ==========
 
-  async chat(messages: OpenClawChatMessage[], model?: string): Promise<string> {
-    // Use HTTP directly (faster and more reliable)
-    // WebSocket is mainly for real-time events, not chat requests
-    return await this.chatViaHttp(messages, model);
+  async chat(
+    messages: OpenClawChatMessage[],
+    options?: { userId?: string; chatId?: string; model?: string }
+  ): Promise<string> {
+    return await this.chatViaHttp(messages, options);
   }
 
   disconnect(): void {
