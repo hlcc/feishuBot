@@ -3,7 +3,7 @@
 import * as lark from '@larksuiteoapi/node-sdk';
 import axios from 'axios';
 import FormData from 'form-data';
-import {
+import type {
   FeishuChannelConfig,
   FeishuEventData,
   OpenClawPluginApi,
@@ -11,7 +11,7 @@ import {
   SendTextOptions,
   SendImageOptions,
   SendFileOptions,
-} from './types';
+} from './types.js';
 
 export class FeishuRuntime {
   private api: OpenClawPluginApi;

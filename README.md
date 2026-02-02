@@ -5,15 +5,16 @@
 ## 快速开始
 
 ```bash
-# 一键安装配置
+npm install
 npm run setup
 ```
 
-按提示输入飞书 App ID 和 App Secret，CLI 会自动：
-1. 构建插件
-2. 更新 OpenClaw 配置文件
-3. 安装插件到 OpenClaw
-4. 显示下一步操作指引
+按提示输入飞书 App ID 和 App Secret，自动完成配置。
+
+然后重启 OpenClaw：
+```bash
+openclaw restart
+```
 
 ## 功能特性
 

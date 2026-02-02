@@ -1,47 +1,10 @@
 {
   "id": "feishu",
-  "name": "Feishu Channel",
-  "version": "1.0.0",
-  "description": "Feishu (Lark) messaging channel for OpenClaw",
+  "channels": ["feishu"],
+  "skills": [],
   "configSchema": {
     "type": "object",
-    "properties": {
-      "appId": {
-        "type": "string",
-        "description": "Feishu App ID"
-      },
-      "appSecret": {
-        "type": "string",
-        "description": "Feishu App Secret"
-      },
-      "dmPolicy": {
-        "type": "string",
-        "enum": ["open", "pairing", "allowlist", "disabled"],
-        "default": "open",
-        "description": "Direct message policy"
-      },
-      "groupPolicy": {
-        "type": "string",
-        "enum": ["open", "disabled", "allowlist"],
-        "default": "open",
-        "description": "Group chat policy"
-      },
-      "requireMention": {
-        "type": "boolean",
-        "default": true,
-        "description": "Require @mention in group chats"
-      }
-    },
-    "required": ["appId", "appSecret"]
-  },
-  "uiHints": {
-    "appId": {
-      "label": "App ID",
-      "placeholder": "cli_xxxxxxxx"
-    },
-    "appSecret": {
-      "label": "App Secret",
-      "sensitive": true
-    }
+    "additionalProperties": false,
+    "properties": {}
   }
 }

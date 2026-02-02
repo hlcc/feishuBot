@@ -1,6 +1,6 @@
 // Feishu Channel Plugin Definition
 
-import {
+import type {
   ChannelPlugin,
   OpenClawConfig,
   FeishuChannelConfig,
@@ -8,8 +8,8 @@ import {
   SendTextOptions,
   SendImageOptions,
   SendFileOptions,
-} from './types';
-import { FeishuRuntime, getRuntime, setRuntime } from './runtime';
+} from './types.js';
+import { FeishuRuntime, getRuntime, setRuntime } from './runtime.js';
 
 export function createFeishuChannel(): ChannelPlugin {
   return {
