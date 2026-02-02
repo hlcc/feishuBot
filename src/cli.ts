@@ -94,7 +94,7 @@ export async function setupCommand(): Promise<void> {
   console.log('  1. 在飞书开放平台配置权限：im:message、im:message:send、im:resource');
   console.log('  2. 事件订阅：选择 WebSocket 模式，添加 im.message.receive_v1 事件');
   console.log('  3. 发布应用版本');
-  console.log('  4. 重启 OpenClaw：\x1b[36mopenclaw restart\x1b[0m\n');
+  console.log('  4. 重启 OpenClaw：\x1b[36mopenclaw gateway restart\x1b[0m\n');
 }
 
 export async function statusCommand(): Promise<void> {

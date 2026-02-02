@@ -1,9 +1,10 @@
-// OpenClaw Feishu Channel Plugin Entry Point
+// OpenClaw 飞书 Channels 插件入口
 
-import { createFeishuChannel } from './src/channel/channel.js';
+import { channel, createChannel } from './src/channel/channel.js';
+import { setFeishuRuntime } from './src/channel/runtime.js';
 import { registerFeishuCli } from './src/cli.js';
 
-/** OpenClaw Plugin API interface */
+/** OpenClaw 插件 API 接口 */
 interface OpenClawPluginApi {
   registerChannel: (opts: { plugin: unknown }) => void;
   registerCli: (
@@ -29,7 +30,7 @@ interface CommanderCommand {
   command: (name: string) => CommanderCommand;
 }
 
-/** The plugin definition for OpenClaw */
+/** 插件定义 */
 const plugin = {
   id: 'feishu',
   name: '飞书',
@@ -41,9 +42,8 @@ const plugin = {
   },
 
   register(api: OpenClawPluginApi) {
-    api.logger.info('正在注册飞书渠道插件');
-
-    const channel = createFeishuChannel();
+    api.logger.info('正在注册飞书 Channels 插件');
+    setFeishuRuntime(api.runtime as any);
     api.registerChannel({ plugin: channel });
 
     // 注册 CLI: openclaw feishu setup/status/uninstall
@@ -55,8 +55,5 @@ const plugin = {
 };
 
 export default plugin;
-export { plugin };
-
-// Re-export types and utilities
-export { createFeishuChannel } from './src/channel/channel.js';
-export { FeishuRuntime, getRuntime } from './src/channel/runtime.js';
+export { plugin, channel, createChannel };
+export { setFeishuRuntime, getFeishuRuntime } from './src/channel/runtime.js';
