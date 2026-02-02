@@ -2,6 +2,21 @@
 
 飞书 (Lark) 消息渠道插件，用于 OpenClaw AI 网关。
 
+## 快速开始
+
+```bash
+# 构建
+npm run build
+
+# 一键安装配置
+npm run setup
+```
+
+运行 setup 后，按提示输入飞书 App ID 和 App Secret，CLI 会自动：
+1. 更新 OpenClaw 配置文件
+2. 安装插件到 OpenClaw
+3. 显示下一步操作指引
+
 ## 功能特性
 
 - ✅ WebSocket 长连接接收飞书事件
@@ -11,7 +26,22 @@
 - ✅ 消息分块发送（超长消息自动拆分）
 - ✅ Markdown 卡片消息
 
-## 安装
+## CLI 命令
+
+```bash
+# 安装配置（交互式）
+npm run setup
+
+# 查看当前状态
+npm run status
+
+# 或直接运行
+node dist/cli.js setup
+node dist/cli.js status
+node dist/cli.js uninstall
+```
+
+## 手动配置
 
 ```bash
 # 从本地路径安装

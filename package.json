@@ -4,10 +4,13 @@
   "description": "Feishu (Lark) messaging channel plugin for OpenClaw",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "bin": {
+    "openclaw-channel-feishu": "./dist/cli.js"
+  },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts",
+    "setup": "node dist/cli.js setup",
+    "status": "node dist/cli.js status",
     "lint": "eslint src/**/*.ts"
   },
   "keywords": [
