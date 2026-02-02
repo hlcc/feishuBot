@@ -1,0 +1,42 @@
+{
+  "name": "feishu-openclaw-bot",
+  "version": "1.0.0",
+  "description": "Feishu bot plugin for OpenClaw - chat with AI via Feishu",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "lint": "eslint src/**/*.ts"
+  },
+  "keywords": [
+    "feishu",
+    "lark",
+    "openclaw",
+    "chatbot",
+    "ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.35.0",
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "ws": "^8.14.2",
+    "uuid": "^9.0.1",
+    "form-data": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "@types/ws": "^8.5.9",
+    "@types/uuid": "^9.0.6",
+    "typescript": "^5.2.2",
+    "ts-node": "^10.9.1",
+    "@typescript-eslint/eslint-plugin": "^6.10.0",
+    "@typescript-eslint/parser": "^6.10.0",
+    "eslint": "^8.53.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
