@@ -1,11 +1,20 @@
 import * as lark from '@larksuiteoapi/node-sdk';
-import { feishuService } from '../services/feishu';
 import { messageHandler } from './message';
 import { logger } from '../utils/logger';
+import { config } from '../utils/config';
 import { FeishuEventPayload } from '../types';
 
+// Event data type for Feishu events
+interface FeishuEventData {
+  header?: {
+    event_id?: string;
+    event_type?: string;
+  };
+  event?: unknown;
+}
+
 // Event dispatcher for Feishu WebSocket long connection
-export class EventDispatcher extends lark.EventDispatcher {
+export class FeishuEventDispatcher extends lark.EventDispatcher {
   private processedEvents: Set<string> = new Set();
   private eventTTL = 5 * 60 * 1000; // 5 minutes
 
@@ -23,7 +32,7 @@ export class EventDispatcher extends lark.EventDispatcher {
     }, this.eventTTL);
   }
 
-  private async handleMessageReceive(data: lark.EventData): Promise<void> {
+  private async handleMessageReceive(data: FeishuEventData): Promise<void> {
     try {
       const eventId = data.header?.event_id;
 
@@ -37,7 +46,7 @@ export class EventDispatcher extends lark.EventDispatcher {
         this.processedEvents.add(eventId);
       }
 
-      const event = data.event as unknown as FeishuEventPayload;
+      const event = data.event as FeishuEventPayload;
 
       if (!event || !event.message || !event.sender) {
         logger.warn('Invalid event structure:', data);
@@ -61,12 +70,13 @@ export class EventDispatcher extends lark.EventDispatcher {
 // Create WebSocket client for long connection
 export class FeishuWebSocketClient {
   private wsClient: lark.WSClient;
+  private eventDispatcher: lark.EventDispatcher;
 
   constructor(eventDispatcher: lark.EventDispatcher) {
+    this.eventDispatcher = eventDispatcher;
     this.wsClient = new lark.WSClient({
-      appId: feishuService.getClient().appId,
-      appSecret: feishuService.getClient().appSecret,
-      eventDispatcher,
+      appId: config.feishuAppId,
+      appSecret: config.feishuAppSecret,
       loggerLevel: lark.LoggerLevel.info,
     });
   }
@@ -75,7 +85,9 @@ export class FeishuWebSocketClient {
     logger.info('Starting Feishu WebSocket client...');
 
     try {
-      await this.wsClient.start();
+      await this.wsClient.start({
+        eventDispatcher: this.eventDispatcher,
+      });
       logger.info('Feishu WebSocket client started successfully');
     } catch (error) {
       logger.error('Failed to start Feishu WebSocket client:', error);
@@ -84,5 +96,5 @@ export class FeishuWebSocketClient {
   }
 }
 
-export const eventDispatcher = new EventDispatcher();
+export const eventDispatcher = new FeishuEventDispatcher();
 export const feishuWSClient = new FeishuWebSocketClient(eventDispatcher);
