@@ -128,7 +128,7 @@ class OpenClawService {
           id: 'cli',
           version: '1.0.0',
           platform: process.platform,
-          mode: 'operator',
+          mode: 'cli',
         },
         ...(config.openclawAuthToken && {
           auth: { token: config.openclawAuthToken },
@@ -227,30 +227,38 @@ class OpenClawService {
       .replace('ws://', 'http://')
       .replace('wss://', 'https://');
 
-    const response = await axios.post(
-      `${httpUrl}/v1/chat/completions`,
-      {
-        model: model || 'openclaw:main',
-        messages,
-        stream: false,
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(config.openclawAuthToken && {
-            Authorization: `Bearer ${config.openclawAuthToken}`,
-          }),
-          'x-openclaw-agent-id': 'main',
+    try {
+      const response = await axios.post(
+        `${httpUrl}/v1/chat/completions`,
+        {
+          model: model || 'openclaw:main',
+          messages,
+          stream: false,
         },
-        timeout: 120000,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(config.openclawAuthToken && {
+              Authorization: `Bearer ${config.openclawAuthToken}`,
+            }),
+            'x-openclaw-agent-id': 'main',
+          },
+          timeout: 120000,
+        }
+      );
+
+      if (response.data?.choices?.[0]?.message?.content) {
+        return response.data.choices[0].message.content;
       }
-    );
 
-    if (response.data?.choices?.[0]?.message?.content) {
-      return response.data.choices[0].message.content;
+      throw new Error('Invalid HTTP chat response');
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error) && error.response?.status === 405) {
+        logger.error('OpenClaw HTTP chat completions endpoint is disabled. Please enable it in OpenClaw config: gateway.http.endpoints.chatCompletions.enabled = true');
+        throw new Error('OpenClaw chat completions endpoint not enabled');
+      }
+      throw error;
     }
-
-    throw new Error('Invalid HTTP chat response');
   }
 
   // ========== Chat (auto fallback) ==========
