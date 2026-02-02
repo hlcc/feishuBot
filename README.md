@@ -10,6 +10,7 @@
 - ✅ 群聊 @机器人 过滤
 - ✅ 超长消息自动分块
 - ✅ 思考状态提示
+- ✅ 卡片流式回复（可选）
 
 ## 快速开始
 
@@ -63,6 +64,7 @@ openclaw feishu uninstall  # 卸载清理
 | `enabled` | 是否启用 | `true` |
 | `requireMention` | 群聊是否需要 @机器人 | `true` |
 | `textChunkLimit` | 消息分块长度 | `4000` |
+| `streamingEnabled` | 是否使用卡片流式回复 | `false` |
 
 ## License
 

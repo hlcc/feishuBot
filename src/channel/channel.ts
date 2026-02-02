@@ -15,6 +15,7 @@ interface FeishuAccountConfig {
   dmPolicy?: string;
   groupPolicy?: string;
   textChunkLimit?: number;
+  streamingEnabled?: boolean;  // 是否启用流式更新
 }
 
 interface PluginConfig {
@@ -77,6 +78,33 @@ async function uploadImage(imageUrl: string): Promise<string> {
     throw new Error('上传图片失败：未获取到 image_key');
   }
   return imageKey;
+}
+
+/** 构建消息卡片 JSON */
+function buildCard(text: string, isStreaming: boolean = false): string {
+  return JSON.stringify({
+    config: { wide_screen_mode: true },
+    header: {
+      template: isStreaming ? 'blue' : 'green',
+      title: { tag: 'plain_text', content: isStreaming ? '正在回复...' : '回复' },
+    },
+    elements: [
+      {
+        tag: 'markdown',
+        content: text || '...',
+      },
+    ],
+  });
+}
+
+/** 通过 PATCH 更新消息卡片 */
+async function updateMessageCard(messageId: string, text: string, isStreaming: boolean = false): Promise<void> {
+  const token = await getTenantAccessToken();
+  await axios.patch(
+    `https://open.feishu.cn/open-apis/im/v1/messages/${messageId}`,
+    { content: buildCard(text, isStreaming) },
+    { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+  );
 }
 
 /** Create the Feishu channel plugin */
@@ -197,18 +225,35 @@ export function createChannel() {
 
               runtime.log?.(`[飞书] 收到${chatType === 'dm' ? '私聊' : '群聊'}消息: "${text.slice(0, 50)}..."`);
 
-              // 发送"正在思考"提示
+              // 检查是否启用流式卡片
+              const useStreaming = account.streamingEnabled === true;
+
+              // 发送"正在思考"提示（流式用卡片，否则用文本）
               let thinkingMsgId: string | null = null;
               try {
-                const thinkingRes = await activeClient!.im.message.create({
-                  data: {
-                    receive_id: chatId,
-                    content: JSON.stringify({ text: '正在思考...' }),
-                    msg_type: 'text',
-                  },
-                  params: { receive_id_type: 'chat_id' },
-                });
-                thinkingMsgId = thinkingRes.data?.message_id ?? null;
+                if (useStreaming) {
+                  // 流式模式：发送卡片
+                  const thinkingRes = await activeClient!.im.message.create({
+                    data: {
+                      receive_id: chatId,
+                      content: buildCard('正在思考...', true),
+                      msg_type: 'interactive',
+                    },
+                    params: { receive_id_type: 'chat_id' },
+                  });
+                  thinkingMsgId = thinkingRes.data?.message_id ?? null;
+                } else {
+                  // 普通模式：发送文本
+                  const thinkingRes = await activeClient!.im.message.create({
+                    data: {
+                      receive_id: chatId,
+                      content: JSON.stringify({ text: '正在思考...' }),
+                      msg_type: 'text',
+                    },
+                    params: { receive_id_type: 'chat_id' },
+                  });
+                  thinkingMsgId = thinkingRes.data?.message_id ?? null;
+                }
               } catch (e) {
                 runtime.error?.(`[飞书] 发送思考提示失败: ${e}`);
               }
@@ -270,6 +315,7 @@ export function createChannel() {
 
               // Create reply dispatcher
               let firstReply = true;
+              let cardMessageId: string | null = useStreaming ? thinkingMsgId : null;
               const { dispatcher, replyOptions, markDispatchIdle } =
                 core.channel.reply.createReplyDispatcherWithTyping({
                   responsePrefix: prefixContext.responsePrefix,
@@ -278,19 +324,7 @@ export function createChannel() {
                     ctx.cfg as OpenClawConfig, route.agentId
                   ),
                   deliver: async (payload: ReplyPayload) => {
-                    // 第一次回复时删除"正在思考"消息
-                    if (firstReply && thinkingMsgId) {
-                      firstReply = false;
-                      try {
-                        await activeClient!.im.message.delete({
-                          path: { message_id: thinkingMsgId },
-                        });
-                      } catch (e) {
-                        // 忽略删除失败
-                      }
-                    }
-
-                    // 先发送图片
+                    // 先发送图片（图片始终单独发送）
                     const mediaUrls = payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
                     for (const mediaUrl of mediaUrls) {
                       try {
@@ -322,6 +356,33 @@ export function createChannel() {
                     const replyText = payload.text ?? '';
                     if (!replyText) return;
 
+                    // 流式模式：更新卡片
+                    if (useStreaming && cardMessageId) {
+                      try {
+                        await updateMessageCard(cardMessageId, replyText, false);
+                        runtime.log?.(`[飞书] 已更新卡片回复 ${to}`);
+                        cardMessageId = null; // 标记卡片已使用
+                        return;
+                      } catch (err) {
+                        runtime.error?.(`[飞书] 更新卡片失败，降级为普通消息: ${err}`);
+                        // 降级为普通消息模式
+                        cardMessageId = null;
+                      }
+                    }
+
+                    // 普通模式：第一次回复时删除"正在思考"消息
+                    if (firstReply && thinkingMsgId && !useStreaming) {
+                      firstReply = false;
+                      try {
+                        await activeClient!.im.message.delete({
+                          path: { message_id: thinkingMsgId },
+                        });
+                      } catch (e) {
+                        // 忽略删除失败
+                      }
+                    }
+
+                    // 普通模式：发送文本消息
                     const chunks = replyText.length <= textLimit
                       ? [replyText]
                       : core.channel.text.chunkMarkdownText(replyText, textLimit);

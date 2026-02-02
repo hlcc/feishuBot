@@ -63,6 +63,9 @@ export async function setupCommand(): Promise<void> {
   const mentionAnswer = await ask('群聊中是否需要 @机器人 才响应？(Y/n): ');
   const requireMention = mentionAnswer.toLowerCase() !== 'n';
 
+  const streamingAnswer = await ask('是否启用卡片流式回复？(y/N): ');
+  const streamingEnabled = streamingAnswer.toLowerCase() === 'y';
+
   console.log('\n\x1b[1m第三步：写入配置\x1b[0m\n');
 
   const config = readConfig();
@@ -73,6 +76,7 @@ export async function setupCommand(): Promise<void> {
     appId,
     appSecret,
     requireMention,
+    streamingEnabled,
     dmPolicy: 'open',
     groupPolicy: 'open',
   };
@@ -108,6 +112,7 @@ export async function statusCommand(): Promise<void> {
     console.log(`   App ID:      ${fc.appId}`);
     console.log(`   已启用:      ${fc.enabled !== false ? '是' : '否'}`);
     console.log(`   群聊需@:     ${fc.requireMention !== false ? '是' : '否'}`);
+    console.log(`   流式回复:    ${fc.streamingEnabled === true ? '是' : '否'}`);
   } else {
     warn('未配置，请运行：openclaw feishu setup');
   }
