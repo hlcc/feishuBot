@@ -18,10 +18,11 @@ export interface FeishuMessageEvent {
   parent_id?: string;
   create_time: string;
   chat_id: string;
-  chat_type: 'p2p' | 'group';
-  message_type: 'text' | 'image' | 'file' | 'audio' | 'media' | 'sticker';
+  chat_type: string;
+  message_type: string;
   content: string;
   mentions?: FeishuMention[];
+  update_time?: string;
 }
 
 export interface FeishuMention {
@@ -37,7 +38,7 @@ export interface FeishuMention {
 export interface FeishuSender {
   sender_id: {
     open_id: string;
-    user_id?: string;
+    user_id?: string | null;
     union_id?: string;
   };
   sender_type: string;
