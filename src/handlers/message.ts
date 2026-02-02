@@ -104,7 +104,7 @@ export class MessageHandler {
       // Call OpenClaw
       let response: string;
       try {
-        response = await openclawService.chatWithHttp(fullMessages);
+        response = await openclawService.chat(fullMessages);
       } catch (error) {
         logger.error('Failed to get response from OpenClaw:', error);
         await feishuService.replyText(

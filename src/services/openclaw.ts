@@ -1,26 +1,32 @@
 import WebSocket from 'ws';
+import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { config } from '../utils/config';
 import { logger } from '../utils/logger';
 import { OpenClawMessage, OpenClawChatMessage, OpenClawChatResponse } from '../types';
 
-type ResponseCallback = (response: OpenClawMessage) => void;
+type ResponseCallback = {
+  resolve: (response: OpenClawMessage) => void;
+  reject: (error: Error) => void;
+};
 
 class OpenClawService {
   private ws: WebSocket | null = null;
   private pendingRequests: Map<string, ResponseCallback> = new Map();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
-  private reconnectDelay = 1000;
+  private reconnectDelay = 3000;
   private isConnected = false;
-  private messageQueue: Array<{ message: OpenClawMessage; resolve: ResponseCallback }> = [];
+  private isHandshakeComplete = false;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+
+  // ========== WebSocket Connection ==========
 
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         const url = new URL(config.openclawGatewayUrl);
 
-        // Add auth token if provided
         if (config.openclawAuthToken) {
           url.searchParams.set('token', config.openclawAuthToken);
         }
@@ -30,10 +36,9 @@ class OpenClawService {
         this.ws = new WebSocket(url.toString());
 
         this.ws.on('open', () => {
-          logger.info('Connected to OpenClaw gateway');
+          logger.info('WebSocket connected to OpenClaw gateway');
           this.isConnected = true;
           this.reconnectAttempts = 0;
-          this.processMessageQueue();
           resolve();
         });
 
@@ -41,9 +46,10 @@ class OpenClawService {
           this.handleMessage(data.toString());
         });
 
-        this.ws.on('close', () => {
-          logger.warn('Disconnected from OpenClaw gateway');
+        this.ws.on('close', (code: number, reason: Buffer) => {
+          logger.warn(`Disconnected from OpenClaw gateway (code: ${code}, reason: ${reason.toString()})`);
           this.isConnected = false;
+          this.isHandshakeComplete = false;
           this.attemptReconnect();
         });
 
@@ -54,7 +60,6 @@ class OpenClawService {
           }
         });
       } catch (error) {
-        logger.error('Failed to connect to OpenClaw gateway:', error);
         reject(error);
       }
     });
@@ -62,150 +67,218 @@ class OpenClawService {
 
   private handleMessage(data: string): void {
     try {
-      const message: OpenClawMessage = JSON.parse(data);
-      logger.debug('Received from OpenClaw:', message);
+      const message = JSON.parse(data);
+      logger.debug('Received from OpenClaw:', JSON.stringify(message));
 
-      if (message.type === 'res' && message.id) {
-        const callback = this.pendingRequests.get(message.id);
-        if (callback) {
-          callback(message);
+      // Handle challenge event - respond with connect request
+      if (message.type === 'event' && message.event === 'connect.challenge') {
+        this.handleChallenge(message);
+        return;
+      }
+
+      // Handle hello-ok response
+      if (message.type === 'res' && message.ok === true && message.id) {
+        const pending = this.pendingRequests.get(message.id);
+        if (pending) {
+          pending.resolve(message);
           this.pendingRequests.delete(message.id);
         }
-      } else if (message.type === 'event') {
-        logger.debug('Received event from OpenClaw:', message.event);
+
+        // Check if this is the connect handshake response
+        if (!this.isHandshakeComplete) {
+          this.isHandshakeComplete = true;
+          logger.info('OpenClaw handshake complete');
+        }
+        return;
+      }
+
+      // Handle error responses
+      if (message.type === 'res' && message.ok === false && message.id) {
+        const pending = this.pendingRequests.get(message.id);
+        if (pending) {
+          pending.reject(new Error(message.error?.message || 'Unknown error'));
+          this.pendingRequests.delete(message.id);
+        }
+        return;
+      }
+
+      // Handle other events
+      if (message.type === 'event') {
+        logger.debug('OpenClaw event:', message.event);
       }
     } catch (error) {
-      logger.error('Failed to parse OpenClaw message:', error);
+      logger.error('Failed to parse OpenClaw message:', error, 'raw:', data);
+    }
+  }
+
+  private handleChallenge(message: Record<string, unknown>): void {
+    logger.info('Received connect challenge, sending connect request...');
+
+    const connectId = uuidv4();
+    const connectRequest = {
+      type: 'req',
+      id: connectId,
+      method: 'connect',
+      params: {
+        role: 'operator',
+        scopes: ['operator.read', 'operator.write'],
+        client: {
+          id: `feishu-bot-${uuidv4().slice(0, 8)}`,
+          name: 'feishu-openclaw-bot',
+          version: '1.0.0',
+          platform: 'node',
+        },
+        ...(config.openclawAuthToken && {
+          auth: { token: config.openclawAuthToken },
+        }),
+      },
+    };
+
+    this.pendingRequests.set(connectId, {
+      resolve: (res) => {
+        logger.info('Connect response:', JSON.stringify(res));
+      },
+      reject: (err) => {
+        logger.error('Connect failed:', err.message);
+      },
+    });
+
+    this.wsSend(connectRequest);
+  }
+
+  private wsSend(data: unknown): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(data));
+      logger.debug('Sent to OpenClaw:', JSON.stringify(data));
     }
   }
 
   private attemptReconnect(): void {
+    if (this.reconnectTimer) return;
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      logger.error('Max reconnection attempts reached');
+      logger.error('Max reconnection attempts reached for OpenClaw');
       return;
     }
 
     this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 5);
 
-    logger.info(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    logger.info(`Reconnecting to OpenClaw in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
-    setTimeout(() => {
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
       this.connect().catch((error) => {
-        logger.error('Reconnection failed:', error);
+        logger.error('OpenClaw reconnection failed:', error.message);
       });
     }, delay);
   }
 
-  private processMessageQueue(): void {
-    while (this.messageQueue.length > 0) {
-      const item = this.messageQueue.shift();
-      if (item) {
-        this.sendRequest(item.message).then(item.resolve);
-      }
+  // ========== Chat via WebSocket ==========
+
+  async chatViaWs(messages: OpenClawChatMessage[], model?: string): Promise<string> {
+    if (!this.isConnected || !this.isHandshakeComplete) {
+      throw new Error('WebSocket not connected or handshake not complete');
     }
-  }
 
-  async sendRequest(message: OpenClawMessage): Promise<OpenClawMessage> {
+    const id = uuidv4();
+    const request = {
+      type: 'req',
+      id,
+      method: 'chat.completions.create',
+      params: {
+        model: model || 'openclaw:main',
+        messages,
+        stream: false,
+      },
+    };
+
     return new Promise((resolve, reject) => {
-      if (!this.isConnected || !this.ws) {
-        // Queue the message for later
-        this.messageQueue.push({ message, resolve });
-        return;
-      }
-
-      const id = message.id || uuidv4();
-      const requestMessage = { ...message, id };
-
-      this.pendingRequests.set(id, resolve);
-
-      try {
-        this.ws.send(JSON.stringify(requestMessage));
-        logger.debug('Sent to OpenClaw:', requestMessage);
-      } catch (error) {
+      const timeout = setTimeout(() => {
         this.pendingRequests.delete(id);
-        reject(error);
-      }
+        reject(new Error('WebSocket chat request timeout'));
+      }, 120000);
 
-      // Timeout for request
-      setTimeout(() => {
-        if (this.pendingRequests.has(id)) {
-          this.pendingRequests.delete(id);
-          reject(new Error('Request timeout'));
-        }
-      }, 60000); // 60 second timeout
+      this.pendingRequests.set(id, {
+        resolve: (response) => {
+          clearTimeout(timeout);
+          const payload = response.payload as OpenClawChatResponse;
+          if (payload?.choices?.[0]?.message?.content) {
+            resolve(payload.choices[0].message.content);
+          } else {
+            reject(new Error('Invalid WebSocket chat response'));
+          }
+        },
+        reject: (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        },
+      });
+
+      this.wsSend(request);
     });
   }
 
-  async chat(messages: OpenClawChatMessage[], model?: string): Promise<string> {
-    try {
-      const request: OpenClawMessage = {
-        type: 'req',
-        method: 'chat.completions.create',
-        params: {
-          model: model || 'default',
-          messages,
-          stream: false,
+  // ========== Chat via HTTP ==========
+
+  async chatViaHttp(messages: OpenClawChatMessage[], model?: string): Promise<string> {
+    const httpUrl = config.openclawGatewayUrl
+      .replace('ws://', 'http://')
+      .replace('wss://', 'https://');
+
+    const response = await axios.post(
+      `${httpUrl}/v1/chat/completions`,
+      {
+        model: model || 'openclaw:main',
+        messages,
+        stream: false,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(config.openclawAuthToken && {
+            Authorization: `Bearer ${config.openclawAuthToken}`,
+          }),
+          'x-openclaw-agent-id': 'main',
         },
-      };
-
-      const response = await this.sendRequest(request);
-
-      if (response.ok && response.payload) {
-        const chatResponse = response.payload as OpenClawChatResponse;
-        if (chatResponse.choices && chatResponse.choices.length > 0) {
-          return chatResponse.choices[0].message.content;
-        }
+        timeout: 120000,
       }
+    );
 
-      throw new Error('Invalid response from OpenClaw');
-    } catch (error) {
-      logger.error('Chat request failed:', error);
-      throw error;
+    if (response.data?.choices?.[0]?.message?.content) {
+      return response.data.choices[0].message.content;
     }
+
+    throw new Error('Invalid HTTP chat response');
   }
 
-  async chatWithHttp(messages: OpenClawChatMessage[], model?: string): Promise<string> {
-    // Alternative HTTP-based chat for OpenAI-compatible API
-    const axios = (await import('axios')).default;
+  // ========== Chat (auto fallback) ==========
 
-    const httpUrl = config.openclawGatewayUrl.replace('ws://', 'http://').replace('wss://', 'https://');
-
-    try {
-      const response = await axios.post(
-        `${httpUrl}/v1/chat/completions`,
-        {
-          model: model || 'default',
-          messages,
-          stream: false,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(config.openclawAuthToken && {
-              Authorization: `Bearer ${config.openclawAuthToken}`,
-            }),
-          },
-          timeout: 120000,
-        }
-      );
-
-      if (response.data?.choices?.[0]?.message?.content) {
-        return response.data.choices[0].message.content;
+  async chat(messages: OpenClawChatMessage[], model?: string): Promise<string> {
+    // Try WebSocket first, then HTTP
+    if (this.isConnected && this.isHandshakeComplete) {
+      try {
+        logger.debug('Trying chat via WebSocket...');
+        return await this.chatViaWs(messages, model);
+      } catch (error) {
+        logger.warn('WebSocket chat failed, falling back to HTTP:', (error as Error).message);
       }
-
-      throw new Error('Invalid response from OpenClaw HTTP API');
-    } catch (error) {
-      logger.error('HTTP chat request failed:', error);
-      throw error;
     }
+
+    // Fallback to HTTP
+    logger.debug('Trying chat via HTTP...');
+    return await this.chatViaHttp(messages, model);
   }
 
   disconnect(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;
       this.isConnected = false;
+      this.isHandshakeComplete = false;
     }
   }
 }
