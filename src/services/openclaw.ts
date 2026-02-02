@@ -230,11 +230,6 @@ class OpenClawService {
       .replace('ws://', 'http://')
       .replace('wss://', 'https://');
 
-    // Build session key from chatId + userId for stable sessions
-    const sessionKey = options?.chatId && options?.userId
-      ? `agent:main:feishu:${options.chatId}:${options.userId}`
-      : undefined;
-
     try {
       const response = await axios.post(
         `${httpUrl}/v1/chat/completions`,
@@ -242,8 +237,8 @@ class OpenClawService {
           model: options?.model || 'openclaw:main',
           messages,
           stream: false,
-          // user field derives a stable session key in OpenClaw
-          user: options?.userId || 'feishu-user',
+          // user field for session management
+          user: options?.userId,
         },
         {
           headers: {
@@ -252,10 +247,6 @@ class OpenClawService {
               Authorization: `Bearer ${config.openclawAuthToken}`,
             }),
             'x-openclaw-agent-id': 'main',
-            'x-openclaw-message-channel': 'feishu',
-            ...(sessionKey && {
-              'x-openclaw-session-key': sessionKey,
-            }),
           },
           timeout: 120000,
         }
