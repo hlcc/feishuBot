@@ -98,10 +98,10 @@ export async function setupCommand(): Promise<void> {
   if (!config.plugins.allow) config.plugins.allow = [];
   if (!config.plugins.entries) config.plugins.entries = {};
 
-  if (!config.plugins.allow.includes('feishu')) {
-    config.plugins.allow.push('feishu');
+  if (!config.plugins.allow.includes('openclaw-channel-feishu')) {
+    config.plugins.allow.push('openclaw-channel-feishu');
   }
-  config.plugins.entries.feishu = { enabled: true };
+  config.plugins.entries['openclaw-channel-feishu'] = { enabled: true };
 
   writeConfig(config);
   log(`Updated ${OPENCLAW_CONFIG_PATH}`);
@@ -151,10 +151,10 @@ export async function uninstallCommand(): Promise<void> {
 
   // Remove from plugins
   if (config.plugins?.allow) {
-    config.plugins.allow = config.plugins.allow.filter((p: string) => p !== 'feishu');
+    config.plugins.allow = config.plugins.allow.filter((p: string) => p !== 'openclaw-channel-feishu');
   }
-  if (config.plugins?.entries?.feishu) {
-    delete config.plugins.entries.feishu;
+  if (config.plugins?.entries?.['openclaw-channel-feishu']) {
+    delete config.plugins.entries['openclaw-channel-feishu'];
   }
 
   writeConfig(config);

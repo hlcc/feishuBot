@@ -1,6 +1,6 @@
 # OpenClaw Feishu Channel Plugin
 
-飞书 (Lark) 消息渠道插件，用于 OpenClaw AI 网关。
+飞书 (feishu) 消息渠道插件，用于 OpenClaw AI 网关。
 
 ## 快速开始
 
