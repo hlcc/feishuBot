@@ -1,8 +1,9 @@
 // Feishu Channel Plugin Definition
 
 import type { PluginRuntime, OpenClawConfig, ReplyPayload } from 'openclaw/plugin-sdk';
-import { createReplyPrefixContext, createTypingCallbacks } from 'openclaw/plugin-sdk';
+import { createReplyPrefixContext } from 'openclaw/plugin-sdk';
 import * as lark from '@larksuiteoapi/node-sdk';
+import axios from 'axios';
 import { getFeishuRuntime } from './runtime.js';
 
 /** Feishu account configuration from channels.feishu */
@@ -36,8 +37,47 @@ interface GatewayContext {
   setStatus: (status: Record<string, unknown>) => void;
 }
 
-// Active client for outbound
+// Active client and config for outbound
 let activeClient: lark.Client | null = null;
+let activeAppId: string = '';
+let activeAppSecret: string = '';
+
+/** 获取 tenant_access_token */
+async function getTenantAccessToken(): Promise<string> {
+  const response = await axios.post(
+    'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
+    { app_id: activeAppId, app_secret: activeAppSecret }
+  );
+  return response.data.tenant_access_token;
+}
+
+/** 上传图片到飞书，返回 image_key */
+async function uploadImage(imageUrl: string): Promise<string> {
+  // 下载图片
+  const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+  const imageBuffer = Buffer.from(imageResponse.data);
+
+  // 获取 token
+  const token = await getTenantAccessToken();
+
+  // 使用 FormData 上传
+  const FormData = (await import('form-data')).default;
+  const formData = new FormData();
+  formData.append('image_type', 'message');
+  formData.append('image', imageBuffer, { filename: 'image.png', contentType: 'image/png' });
+
+  const uploadResponse = await axios.post(
+    'https://open.feishu.cn/open-apis/im/v1/images',
+    formData,
+    { headers: { ...formData.getHeaders(), Authorization: `Bearer ${token}` } }
+  );
+
+  const imageKey = uploadResponse.data?.data?.image_key;
+  if (!imageKey) {
+    throw new Error('上传图片失败：未获取到 image_key');
+  }
+  return imageKey;
+}
 
 /** Create the Feishu channel plugin */
 export function createChannel() {
@@ -99,6 +139,8 @@ export function createChannel() {
 
         const appId = account.appId ?? '';
         const appSecret = account.appSecret ?? '';
+        activeAppId = appId;
+        activeAppSecret = appSecret;
 
         // Create Lark client for outbound
         activeClient = new lark.Client({ appId, appSecret, disableTokenCache: false });
@@ -154,6 +196,22 @@ export function createChannel() {
               if (!text.trim()) return;
 
               runtime.log?.(`[飞书] 收到${chatType === 'dm' ? '私聊' : '群聊'}消息: "${text.slice(0, 50)}..."`);
+
+              // 发送"正在思考"提示
+              let thinkingMsgId: string | null = null;
+              try {
+                const thinkingRes = await activeClient!.im.message.create({
+                  data: {
+                    receive_id: chatId,
+                    content: JSON.stringify({ text: '🤔 正在思考...' }),
+                    msg_type: 'text',
+                  },
+                  params: { receive_id_type: 'chat_id' },
+                });
+                thinkingMsgId = thinkingRes.data?.message_id ?? null;
+              } catch (e) {
+                runtime.error?.(`[飞书] 发送思考提示失败: ${e}`);
+              }
 
               // Resolve route
               const route = core.channel.routing.resolveAgentRoute({
@@ -211,6 +269,7 @@ export function createChannel() {
               });
 
               // Create reply dispatcher
+              let firstReply = true;
               const { dispatcher, replyOptions, markDispatchIdle } =
                 core.channel.reply.createReplyDispatcherWithTyping({
                   responsePrefix: prefixContext.responsePrefix,
@@ -219,6 +278,47 @@ export function createChannel() {
                     ctx.cfg as OpenClawConfig, route.agentId
                   ),
                   deliver: async (payload: ReplyPayload) => {
+                    // 第一次回复时删除"正在思考"消息
+                    if (firstReply && thinkingMsgId) {
+                      firstReply = false;
+                      try {
+                        await activeClient!.im.message.delete({
+                          path: { message_id: thinkingMsgId },
+                        });
+                      } catch (e) {
+                        // 忽略删除失败
+                      }
+                    }
+
+                    // 先发送图片
+                    const mediaUrls = payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
+                    for (const mediaUrl of mediaUrls) {
+                      try {
+                        const imageKey = await uploadImage(mediaUrl);
+                        await activeClient!.im.message.create({
+                          data: {
+                            receive_id: chatId,
+                            content: JSON.stringify({ image_key: imageKey }),
+                            msg_type: 'image',
+                          },
+                          params: { receive_id_type: 'chat_id' },
+                        });
+                        runtime.log?.(`[飞书] 已发送图片 ${to}`);
+                      } catch (err) {
+                        runtime.error?.(`[飞书] 发送图片失败: ${err}`);
+                        // 降级：发送链接
+                        await activeClient!.im.message.create({
+                          data: {
+                            receive_id: chatId,
+                            content: JSON.stringify({ text: `[图片] ${mediaUrl}` }),
+                            msg_type: 'text',
+                          },
+                          params: { receive_id_type: 'chat_id' },
+                        });
+                      }
+                    }
+
+                    // 发送文本
                     const replyText = payload.text ?? '';
                     if (!replyText) return;
 

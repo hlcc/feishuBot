@@ -48,7 +48,7 @@ function writeConfig(config: Record<string, any>): void {
 }
 
 export async function setupCommand(): Promise<void> {
-  console.log('\n\x1b[1m🚀 飞书渠道配置向导\x1b[0m\n');
+  console.log('\n\x1b[1m🚀 飞书机器人配置向导\x1b[0m\n');
 
   console.log('\x1b[1m第一步：飞书应用凭证\x1b[0m');
   console.log('请先在飞书开放平台创建应用：https://open.feishu.cn/app\n');
