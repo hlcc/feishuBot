@@ -9,8 +9,9 @@
   },
   "scripts": {
     "build": "tsc",
-    "setup": "node dist/cli.js setup",
-    "status": "node dist/cli.js status",
+    "setup": "npm run build && node dist/cli.js setup",
+    "status": "npm run build && node dist/cli.js status",
+    "uninstall": "node dist/cli.js uninstall",
     "lint": "eslint src/**/*.ts"
   },
   "keywords": [
