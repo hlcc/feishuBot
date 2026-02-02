@@ -22,7 +22,9 @@
     "ai"
   ],
   "openclaw": {
-    "extensions": ["./index.ts"],
+    "extensions": [
+      "./index.ts"
+    ],
     "channel": {
       "id": "feishu",
       "label": "Feishu (Lark)",
@@ -30,18 +32,19 @@
     }
   },
   "scripts": {
-    "setup": "npx ts-node --esm src/cli.ts setup",
-    "status": "npx ts-node --esm src/cli.ts status",
-    "uninstall": "npx ts-node --esm src/cli.ts uninstall"
+    "setup": "npx tsx src/cli.ts setup",
+    "status": "npx tsx src/cli.ts status",
+    "uninstall": "npx tsx src/cli.ts uninstall"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.35.0",
     "axios": "^1.6.0",
-    "form-data": "^4.0.0"
+    "form-data": "^4.0.0",
+    "json5": "^2.2.3"
   },
   "devDependencies": {
     "@types/node": "^20.9.0",
-    "ts-node": "^10.9.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.2.2"
   },
   "engines": {

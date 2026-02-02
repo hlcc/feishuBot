@@ -5,6 +5,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
+import JSON5 from 'json5';
 
 const HOME = process.env.HOME || process.env.USERPROFILE || '~';
 const OPENCLAW_DIR = path.join(HOME, '.openclaw');
@@ -23,15 +24,12 @@ function readConfig(): Record<string, any> {
   try {
     if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
       const raw = fs.readFileSync(OPENCLAW_CONFIG_PATH, 'utf-8');
-      // Strip JSON5 comments
-      const clean = raw
-        .replace(/\/\/.*$/gm, '')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/,(\s*[}\]])/g, '$1');
-      return JSON.parse(clean);
+      return JSON5.parse(raw);
     }
   } catch (e) {
-    warn(`Could not parse ${OPENCLAW_CONFIG_PATH}, will create new config`);
+    err(`Failed to parse ${OPENCLAW_CONFIG_PATH}: ${e}`);
+    err('Please fix the config file manually or backup and delete it.');
+    process.exit(1);
   }
   return {};
 }
@@ -76,12 +74,15 @@ async function setup(): Promise<void> {
   const mentionAnswer = await ask('Require @mention in groups? (Y/n): ');
   const requireMention = mentionAnswer.toLowerCase() !== 'n';
 
-  // Step 3: Write config (merge, not overwrite)
+  // Step 3: Write config (merge feishu config only, preserve everything else)
   console.log('\n\x1b[1mStep 3: Configuring\x1b[0m\n');
 
   const config = readConfig();
+
+  // Ensure channels object exists
   if (!config.channels) config.channels = {};
 
+  // Only update feishu channel config
   config.channels.feishu = {
     enabled: true,
     appId,
@@ -90,6 +91,19 @@ async function setup(): Promise<void> {
     dmPolicy: 'open',
     groupPolicy: 'open',
   };
+
+  // Ensure plugins config
+  if (!config.plugins) config.plugins = { enabled: true, allow: [], entries: {} };
+  if (!config.plugins.allow) config.plugins.allow = [];
+  if (!config.plugins.entries) config.plugins.entries = {};
+
+  // Add feishu to allowed plugins if not already
+  if (!config.plugins.allow.includes('feishu')) {
+    config.plugins.allow.push('feishu');
+  }
+
+  // Enable feishu plugin
+  config.plugins.entries.feishu = { enabled: true };
 
   writeConfig(config);
   log(`Updated ${OPENCLAW_CONFIG_PATH}`);
