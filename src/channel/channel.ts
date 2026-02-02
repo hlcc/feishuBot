@@ -395,7 +395,33 @@ export function createChannel() {
 
     outbound: {
       deliveryMode: 'direct' as const,
+      chunkerMode: 'markdown' as const,
       textChunkLimit: 4000,
+
+      chunker: (text: string, limit: number) => {
+        try {
+          const core = getFeishuRuntime();
+          return core.channel.text.chunkMarkdownText(text, limit);
+        } catch {
+          if (text.length <= limit) return [text];
+          const chunks: string[] = [];
+          for (let i = 0; i < text.length; i += limit) {
+            chunks.push(text.slice(i, i + limit));
+          }
+          return chunks;
+        }
+      },
+
+      resolveTarget: ({ to }: { to?: string }) => {
+        const trimmed = to?.trim();
+        if (!trimmed) {
+          return { ok: false, error: new Error('需要指定目标: --to <user:openid|group:chatid>') };
+        }
+        if (/^(user|group):/.test(trimmed)) {
+          return { ok: true, to: trimmed };
+        }
+        return { ok: false, error: new Error(`无效的目标: ${trimmed}`) };
+      },
 
       sendText: async ({ to, text, accountId, replyToId }: {
         to: string;
@@ -407,16 +433,15 @@ export function createChannel() {
           return { ok: false, error: '飞书客户端未连接' };
         }
 
-        // Parse target: group:<chatId> or user:<openId>
         const groupMatch = to.match(/^group:(.+)$/);
         const userMatch = to.match(/^user:(.+)$/);
+        const chatId = groupMatch?.[1] || userMatch?.[1];
+
+        if (!chatId) {
+          return { ok: false, error: `无效的目标: ${to}` };
+        }
 
         try {
-          const chatId = groupMatch?.[1] || userMatch?.[1];
-          if (!chatId) {
-            return { ok: false, error: `无效的目标: ${to}` };
-          }
-
           if (replyToId) {
             await activeClient.im.message.reply({
               path: { message_id: replyToId },
@@ -433,6 +458,57 @@ export function createChannel() {
                 msg_type: 'text',
               },
               params: { receive_id_type: groupMatch ? 'chat_id' : 'open_id' },
+            });
+          }
+          return { ok: true, channel: 'feishu', to };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return { ok: false, error: message };
+        }
+      },
+
+      sendMedia: async ({ to, text, mediaUrl, accountId, replyToId }: {
+        to: string;
+        text?: string;
+        mediaUrl: string;
+        accountId?: string;
+        replyToId?: string;
+      }) => {
+        if (!activeClient) {
+          return { ok: false, error: '飞书客户端未连接' };
+        }
+
+        const groupMatch = to.match(/^group:(.+)$/);
+        const userMatch = to.match(/^user:(.+)$/);
+        const chatId = groupMatch?.[1] || userMatch?.[1];
+
+        if (!chatId) {
+          return { ok: false, error: `无效的目标: ${to}` };
+        }
+
+        const receiveIdType = groupMatch ? 'chat_id' : 'open_id';
+
+        try {
+          // 上传并发送图片
+          const imageKey = await uploadImage(mediaUrl);
+          await activeClient.im.message.create({
+            data: {
+              receive_id: chatId,
+              content: JSON.stringify({ image_key: imageKey }),
+              msg_type: 'image',
+            },
+            params: { receive_id_type: receiveIdType },
+          });
+
+          // 如果有文字说明也发送
+          if (text) {
+            await activeClient.im.message.create({
+              data: {
+                receive_id: chatId,
+                content: JSON.stringify({ text }),
+                msg_type: 'text',
+              },
+              params: { receive_id_type: receiveIdType },
             });
           }
 
