@@ -6,7 +6,7 @@
   "exports": {
     ".": "./index.ts"
   },
-  "description": "Feishu (Lark) messaging channel plugin for OpenClaw",
+  "description": "飞书 Channels 插件",
   "license": "MIT",
   "files": [
     "index.ts",
@@ -15,7 +15,6 @@
   ],
   "keywords": [
     "feishu",
-    "lark",
     "openclaw",
     "openclaw-channel",
     "chatbot",
@@ -27,8 +26,8 @@
     ],
     "channel": {
       "id": "feishu",
-      "label": "Feishu (Lark)",
-      "blurb": "Connect via Feishu Bot with WebSocket long connection"
+      "label": "飞书",
+      "blurb": "通过飞书机器人 WebSocket 长连接收发消息"
     }
   },
   "scripts": {

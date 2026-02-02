@@ -16,11 +16,11 @@ export function createFeishuChannel(): ChannelPlugin {
     id: 'feishu',
 
     meta: {
-      label: 'Feishu (Lark)',
-      selectionLabel: 'Feishu (WebSocket)',
+      label: '飞书',
+      selectionLabel: '飞书 (WebSocket)',
       docsPath: '/channels/feishu',
-      blurb: 'Connect via Feishu Enterprise Bot with WebSocket long connection',
-      aliases: ['lark', 'feishu-bot'],
+      blurb: '通过飞书企业机器人 WebSocket 长连接收发消息',
+      aliases: ['feishu-bot'],
     },
 
     capabilities: {

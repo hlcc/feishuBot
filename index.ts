@@ -31,9 +31,9 @@ interface CommanderCommand {
 
 /** The plugin definition for OpenClaw */
 const plugin = {
-  id: 'openclaw-channel-feishu',
-  name: 'Feishu (Lark)',
-  description: 'Feishu messaging channel plugin via WebSocket',
+  id: 'feishu',
+  name: '飞书',
+  description: '飞书 Channels 插件',
   configSchema: {
     type: 'object' as const,
     properties: {},
@@ -41,12 +41,12 @@ const plugin = {
   },
 
   register(api: OpenClawPluginApi) {
-    api.logger.info('Registering Feishu (Lark) channel plugin');
+    api.logger.info('正在注册飞书渠道插件');
 
     const channel = createFeishuChannel();
     api.registerChannel({ plugin: channel });
 
-    // Register CLI: openclaw feishu setup/status/uninstall
+    // 注册 CLI: openclaw feishu setup/status/uninstall
     api.registerCli(
       ({ program }) => registerFeishuCli(program),
       { commands: ['feishu'] },
