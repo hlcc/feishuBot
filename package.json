@@ -32,9 +32,7 @@
     }
   },
   "scripts": {
-    "setup": "npx tsx src/cli.ts setup",
-    "status": "npx tsx src/cli.ts status",
-    "uninstall": "npx tsx src/cli.ts uninstall"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.35.0",

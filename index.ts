@@ -1,12 +1,19 @@
 // OpenClaw Feishu Channel Plugin Entry Point
 
 import { createFeishuChannel } from './src/channel/channel.js';
+import { registerFeishuCli } from './src/cli.js';
 import type { OpenClawPluginApi } from './src/channel/types.js';
 
 export default function registerFeishuPlugin(api: OpenClawPluginApi): void {
   const channel = createFeishuChannel();
 
   api.registerChannel({ plugin: channel });
+
+  // Register CLI commands: openclaw feishu setup/status/uninstall
+  api.registerCli(
+    ({ program }) => registerFeishuCli(program),
+    { commands: ['feishu'] }
+  );
 
   api.log.info('Feishu channel plugin registered');
 }

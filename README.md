@@ -5,8 +5,11 @@
 ## 快速开始
 
 ```bash
-npm install
-npm run setup
+# 安装插件
+openclaw plugins install ./path/to/openclaw-channel-feishu
+
+# 一键配置
+openclaw feishu setup
 ```
 
 按提示输入飞书 App ID 和 App Secret，自动完成配置。
@@ -28,16 +31,14 @@ openclaw restart
 ## CLI 命令
 
 ```bash
-# 安装配置（交互式）
-npm run setup
+# 交互式安装配置
+openclaw feishu setup
 
 # 查看当前状态
-npm run status
+openclaw feishu status
 
-# 或直接运行
-node dist/cli.js setup
-node dist/cli.js status
-node dist/cli.js uninstall
+# 卸载清理
+openclaw feishu uninstall
 ```
 
 ## 手动配置

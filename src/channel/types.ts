@@ -70,6 +70,10 @@ export interface FeishuEventData {
 // OpenClaw Plugin API types (minimal definitions)
 export interface OpenClawPluginApi {
   registerChannel(options: { plugin: ChannelPlugin }): void;
+  registerCli(
+    handler: (opts: { program: CommanderProgram }) => void,
+    opts: { commands: string[] }
+  ): void;
   getConfig(): OpenClawConfig;
   log: {
     info(msg: string, ...args: unknown[]): void;
@@ -80,6 +84,18 @@ export interface OpenClawPluginApi {
   runtime: {
     dispatchInboundMessage(context: InboundMessageContext): Promise<void>;
   };
+}
+
+export interface CommanderCommand {
+  description(desc: string): CommanderCommand;
+  argument(name: string, desc?: string): CommanderCommand;
+  option(flags: string, desc?: string): CommanderCommand;
+  action(fn: (...args: unknown[]) => void | Promise<void>): CommanderCommand;
+  command(name: string): CommanderCommand;
+}
+
+export interface CommanderProgram {
+  command(name: string): CommanderCommand;
 }
 
 export interface OpenClawConfig {
