@@ -123,7 +123,7 @@ class OpenClawService {
         minProtocol: 3,
         maxProtocol: 3,
         role: 'operator',
-        scopes: ['operator.read', 'operator.write'],
+        scopes: ['operator.read', 'operator.write', 'operator.admin'],
         client: {
           id: 'cli',
           version: '1.0.0',
@@ -264,18 +264,8 @@ class OpenClawService {
   // ========== Chat (auto fallback) ==========
 
   async chat(messages: OpenClawChatMessage[], model?: string): Promise<string> {
-    // Try WebSocket first, then HTTP
-    if (this.isConnected && this.isHandshakeComplete) {
-      try {
-        logger.debug('Trying chat via WebSocket...');
-        return await this.chatViaWs(messages, model);
-      } catch (error) {
-        logger.warn('WebSocket chat failed, falling back to HTTP:', (error as Error).message);
-      }
-    }
-
-    // Fallback to HTTP
-    logger.debug('Trying chat via HTTP...');
+    // Use HTTP directly (faster and more reliable)
+    // WebSocket is mainly for real-time events, not chat requests
     return await this.chatViaHttp(messages, model);
   }
 
