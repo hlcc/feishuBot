@@ -203,7 +203,7 @@ export function createChannel() {
                 const thinkingRes = await activeClient!.im.message.create({
                   data: {
                     receive_id: chatId,
-                    content: JSON.stringify({ text: '🤔 正在思考...' }),
+                    content: JSON.stringify({ text: '正在思考...' }),
                     msg_type: 'text',
                   },
                   params: { receive_id_type: 'chat_id' },

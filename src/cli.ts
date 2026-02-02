@@ -1,4 +1,4 @@
-// 飞书渠道 CLI 命令 - 通过 OpenClaw 插件 API 注册
+// 飞书机器人 CLI 命令 - 通过 OpenClaw 插件 API 注册
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -59,7 +59,7 @@ export async function setupCommand(): Promise<void> {
   const appSecret = await ask('请输入 App Secret: ');
   if (!appSecret) { err('App Secret 不能为空'); return; }
 
-  console.log('\n\x1b[1m第二步：渠道选项\x1b[0m\n');
+  console.log('\n\x1b[1m第二步Channels选项\x1b[0m\n');
   const mentionAnswer = await ask('群聊中是否需要 @机器人 才响应？(Y/n): ');
   const requireMention = mentionAnswer.toLowerCase() !== 'n';
 
@@ -98,13 +98,13 @@ export async function setupCommand(): Promise<void> {
 }
 
 export async function statusCommand(): Promise<void> {
-  console.log('\n\x1b[1m📊 飞书渠道状态\x1b[0m\n');
+  console.log('\n\x1b[1m📊 飞书Channels状态\x1b[0m\n');
 
   const config = readConfig();
   const fc = config.channels?.feishu;
 
   if (fc) {
-    log('渠道已配置');
+    log('飞书Channels已配置');
     console.log(`   App ID:      ${fc.appId}`);
     console.log(`   已启用:      ${fc.enabled !== false ? '是' : '否'}`);
     console.log(`   群聊需@:     ${fc.requireMention !== false ? '是' : '否'}`);
@@ -123,7 +123,7 @@ export async function statusCommand(): Promise<void> {
 }
 
 export async function uninstallCommand(): Promise<void> {
-  console.log('\n\x1b[1m🗑️  卸载飞书渠道\x1b[0m\n');
+  console.log('\n\x1b[1m🗑️  卸载飞书Channels\x1b[0m\n');
 
   const confirm = await ask('确定要卸载吗？这将删除所有飞书相关配置 (y/N): ');
   if (confirm.toLowerCase() !== 'y') {
@@ -189,25 +189,25 @@ interface CommanderProgram {
 export function registerFeishuCli(program: CommanderProgram): void {
   const feishu = program
     .command('feishu')
-    .description('飞书渠道管理');
+    .description('飞书Channels管理');
 
   feishu
     .command('setup')
-    .description('交互式配置飞书渠道')
+    .description('交互式配置飞书Channels')
     .action(async () => {
       await setupCommand();
     });
 
   feishu
     .command('status')
-    .description('查看飞书渠道配置状态')
+    .description('查看飞Channels配置状态')
     .action(async () => {
       await statusCommand();
     });
 
   feishu
     .command('uninstall')
-    .description('卸载飞书渠道并清理配置')
+    .description('卸载飞书Channels并清理配置')
     .action(async () => {
       await uninstallCommand();
     });
