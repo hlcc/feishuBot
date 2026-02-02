@@ -12,6 +12,8 @@
 - ✅ 思考状态提示
 - ✅ 卡片流式回复（可选）
 
+![飞书机器人对话示例](images/feishubot_streming_chat.jpg)
+
 ## 快速开始
 
 ```bash
