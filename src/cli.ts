@@ -11,7 +11,7 @@ const OPENCLAW_CONFIG_PATH = path.join(OPENCLAW_DIR, 'openclaw.json');
 const EXTENSIONS_DIR = path.join(OPENCLAW_DIR, 'extensions');
 
 const PLUGIN_ID = 'feishu';
-const PLUGIN_DIR_NAME = 'openclaw-channel-feishu';
+const PLUGIN_DIR_NAME = 'feishu';
 
 const log = (m: string) => console.log(`\x1b[32m✓\x1b[0m ${m}`);
 const warn = (m: string) => console.log(`\x1b[33m⚠\x1b[0m ${m}`);

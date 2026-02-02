@@ -1,5 +1,5 @@
 {
-  "name": "openclaw-channel-feishu",
+  "name": "feishu",
   "version": "1.0.0",
   "type": "module",
   "main": "./index.ts",
