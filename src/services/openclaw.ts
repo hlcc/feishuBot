@@ -120,13 +120,15 @@ class OpenClawService {
       id: connectId,
       method: 'connect',
       params: {
+        minProtocol: 3,
+        maxProtocol: 3,
         role: 'operator',
         scopes: ['operator.read', 'operator.write'],
         client: {
-          id: `feishu-bot-${uuidv4().slice(0, 8)}`,
-          name: 'feishu-openclaw-bot',
+          id: 'cli',
           version: '1.0.0',
-          platform: 'node',
+          platform: process.platform,
+          mode: 'operator',
         },
         ...(config.openclawAuthToken && {
           auth: { token: config.openclawAuthToken },
