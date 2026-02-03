@@ -15,7 +15,8 @@ interface FeishuAccountConfig {
   dmPolicy?: string;
   groupPolicy?: string;
   textChunkLimit?: number;
-  streamingEnabled?: boolean;  // 是否启用流式更新
+  streamingEnabled?: boolean;  // 是否启用流式卡片
+  voiceEnabled?: boolean;      // 是否启用语音识别
 }
 
 interface PluginConfig {
@@ -80,6 +81,65 @@ async function uploadImage(imageUrl: string): Promise<string> {
   return imageKey;
 }
 
+/** 根据文件扩展名获取 MIME 类型 */
+function getMimeType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  const mimeTypes: Record<string, string> = {
+    pdf: 'application/pdf',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    txt: 'text/plain',
+    csv: 'text/csv',
+    zip: 'application/zip',
+    rar: 'application/x-rar-compressed',
+    mp3: 'audio/mpeg',
+    mp4: 'video/mp4',
+    wav: 'audio/wav',
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+/** 上传文件到飞书，返回 file_key */
+async function uploadFile(fileUrl: string, filename?: string): Promise<{ fileKey: string; fileName: string }> {
+  // 下载文件
+  const fileResponse = await axios.get(fileUrl, { responseType: 'arraybuffer' });
+  const fileBuffer = Buffer.from(fileResponse.data);
+
+  // 从 URL 提取文件名
+  const urlPath = new URL(fileUrl).pathname;
+  const extractedName = urlPath.split('/').pop() || 'file';
+  const fileName = filename || extractedName;
+
+  // 获取 token
+  const token = await getTenantAccessToken();
+
+  // 使用 FormData 上传
+  const FormData = (await import('form-data')).default;
+  const formData = new FormData();
+  formData.append('file_type', 'stream');  // 通用文件类型
+  formData.append('file_name', fileName);
+  formData.append('file', fileBuffer, {
+    filename: fileName,
+    contentType: getMimeType(fileName)
+  });
+
+  const uploadResponse = await axios.post(
+    'https://open.feishu.cn/open-apis/im/v1/files',
+    formData,
+    { headers: { ...formData.getHeaders(), Authorization: `Bearer ${token}` } }
+  );
+
+  const fileKey = uploadResponse.data?.data?.file_key;
+  if (!fileKey) {
+    throw new Error('上传文件失败：未获取到 file_key');
+  }
+  return { fileKey, fileName };
+}
+
 /** 构建消息卡片 JSON */
 function buildCard(text: string, isStreaming: boolean = false): string {
   return JSON.stringify({
@@ -105,6 +165,93 @@ async function updateMessageCard(messageId: string, text: string, isStreaming: b
     { content: buildCard(text, isStreaming) },
     { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
   );
+}
+
+/** 下载消息中的音频资源 */
+async function downloadAudioResource(messageId: string, fileKey: string): Promise<Buffer> {
+  const token = await getTenantAccessToken();
+  const response = await axios.get(
+    `https://open.feishu.cn/open-apis/im/v1/messages/${messageId}/resources/${fileKey}`,
+    {
+      params: { type: 'audio' },
+      headers: { Authorization: `Bearer ${token}` },
+      responseType: 'arraybuffer',
+    }
+  );
+  return Buffer.from(response.data);
+}
+
+/** 将音频转换为 PCM 格式（16k采样率，单声道，16位） */
+async function convertToPcm(audioBuffer: Buffer): Promise<Buffer> {
+  const { spawn } = await import('node:child_process');
+  const { Readable } = await import('node:stream');
+
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn('ffmpeg', [
+      '-i', 'pipe:0',           // 从 stdin 读取
+      '-f', 's16le',            // 输出格式：16位小端 PCM
+      '-acodec', 'pcm_s16le',   // 编码器
+      '-ar', '16000',           // 采样率 16kHz
+      '-ac', '1',               // 单声道
+      'pipe:1',                 // 输出到 stdout
+    ]);
+
+    const chunks: Buffer[] = [];
+
+    ffmpeg.stdout.on('data', (chunk) => chunks.push(chunk));
+    ffmpeg.stderr.on('data', () => {}); // 忽略 ffmpeg 日志
+
+    ffmpeg.on('close', (code) => {
+      if (code === 0) {
+        resolve(Buffer.concat(chunks));
+      } else {
+        reject(new Error(`FFmpeg 退出码: ${code}`));
+      }
+    });
+
+    ffmpeg.on('error', (err) => {
+      reject(new Error(`FFmpeg 启动失败: ${err.message}。请确保已安装 ffmpeg。`));
+    });
+
+    // 将音频数据写入 ffmpeg stdin
+    const inputStream = Readable.from(audioBuffer);
+    inputStream.pipe(ffmpeg.stdin);
+  });
+}
+
+/** 调用飞书语音识别 API（支持60秒以内音频） */
+async function speechToText(pcmBuffer: Buffer): Promise<string> {
+  const token = await getTenantAccessToken();
+
+  // 生成 16 位随机 file_id
+  const fileId = Math.random().toString(36).substring(2, 10) +
+                 Math.random().toString(36).substring(2, 10);
+
+  const response = await axios.post(
+    'https://open.feishu.cn/open-apis/speech_to_text/v1/speech/file_recognize',
+    {
+      speech: {
+        speech: pcmBuffer.toString('base64'),
+      },
+      config: {
+        file_id: fileId,
+        format: 'pcm',
+        engine_type: '16k_auto',  // 中英混合识别
+      },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (response.data?.code !== 0) {
+    throw new Error(`语音识别失败: ${response.data?.msg || '未知错误'}`);
+  }
+
+  return response.data?.data?.recognition_text || '';
 }
 
 /** Create the Feishu channel plugin */
@@ -204,6 +351,7 @@ export function createChannel() {
 
               // Parse text
               let text = '';
+              let isVoiceMessage = false;
               if (message.message_type === 'text') {
                 const parsed = JSON.parse(message.content);
                 text = parsed.text || '';
@@ -211,6 +359,32 @@ export function createChannel() {
                   for (const mention of message.mentions) {
                     text = text.replace(mention.key, '').trim();
                   }
+                }
+              } else if (message.message_type === 'audio') {
+                // 语音消息处理
+                isVoiceMessage = true;
+                if (account.voiceEnabled === true) {
+                  try {
+                    const parsed = JSON.parse(message.content);
+                    const fileKey = parsed.file_key;
+                    if (fileKey) {
+                      runtime.log?.('[飞书] 正在识别语音消息...');
+                      // 下载音频
+                      const audioBuffer = await downloadAudioResource(message.message_id, fileKey);
+                      // 转换为 PCM 格式
+                      const pcmBuffer = await convertToPcm(audioBuffer);
+                      // 语音识别
+                      text = await speechToText(pcmBuffer);
+                      runtime.log?.(`[飞书] 语音识别结果: "${text.slice(0, 50)}..."`);
+                    } else {
+                      text = '[语音消息，无法获取文件]';
+                    }
+                  } catch (err) {
+                    runtime.error?.(`[飞书] 语音识别失败: ${err}`);
+                    text = '[语音消息，识别失败]';
+                  }
+                } else {
+                  text = '[语音消息]';
                 }
               } else if (message.message_type === 'image') {
                 text = '[图片]';
@@ -316,6 +490,8 @@ export function createChannel() {
               // Create reply dispatcher
               let firstReply = true;
               let cardMessageId: string | null = useStreaming ? thinkingMsgId : null;
+              let accumulatedText = '';  // 流式模式下累积所有回复内容
+              let deliverCount = 0;  // 记录 deliver 调用次数
               const { dispatcher, replyOptions, markDispatchIdle } =
                 core.channel.reply.createReplyDispatcherWithTyping({
                   responsePrefix: prefixContext.responsePrefix,
@@ -324,6 +500,9 @@ export function createChannel() {
                     ctx.cfg as OpenClawConfig, route.agentId
                   ),
                   deliver: async (payload: ReplyPayload) => {
+                    deliverCount++;
+                    runtime.log?.(`[飞书] deliver 回调 #${deliverCount}，文本长度: ${payload.text?.length || 0}`);
+
                     // 先发送图片（图片始终单独发送）
                     const mediaUrls = payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
                     for (const mediaUrl of mediaUrls) {
@@ -356,16 +535,19 @@ export function createChannel() {
                     const replyText = payload.text ?? '';
                     if (!replyText) return;
 
-                    // 流式模式：更新卡片
+                    // 流式模式：累积内容并更新卡片
                     if (useStreaming && cardMessageId) {
                       try {
-                        await updateMessageCard(cardMessageId, replyText, false);
+                        if (accumulatedText) {
+                          accumulatedText += '\n\n---\n\n' + replyText;
+                        } else {
+                          accumulatedText = replyText;
+                        }
+                        await updateMessageCard(cardMessageId, accumulatedText, true);
                         runtime.log?.(`[飞书] 已更新卡片回复 ${to}`);
-                        cardMessageId = null; // 标记卡片已使用
                         return;
                       } catch (err) {
                         runtime.error?.(`[飞书] 更新卡片失败，降级为普通消息: ${err}`);
-                        // 降级为普通消息模式
                         cardMessageId = null;
                       }
                     }
@@ -418,6 +600,16 @@ export function createChannel() {
                 replyOptions,
               });
               markDispatchIdle();
+
+              // 流式模式：最终更新卡片为完成状态
+              if (useStreaming && cardMessageId && accumulatedText) {
+                try {
+                  await updateMessageCard(cardMessageId, accumulatedText, false);
+                  runtime.log?.(`[飞书] 卡片已更新为完成状态`);
+                } catch (err) {
+                  runtime.error?.(`[飞书] 更新卡片完成状态失败: ${err}`);
+                }
+              }
             } catch (err) {
               runtime.error?.(`[飞书] 消息处理出错: ${err}`);
             }
@@ -574,6 +766,58 @@ export function createChannel() {
           }
 
           return { ok: true, channel: 'feishu', to };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return { ok: false, error: message };
+        }
+      },
+
+      sendFile: async ({ to, fileUrl, fileName, text, accountId }: {
+        to: string;
+        fileUrl: string;
+        fileName?: string;
+        text?: string;
+        accountId?: string;
+      }) => {
+        if (!activeClient) {
+          return { ok: false, error: '飞书客户端未连接' };
+        }
+
+        const groupMatch = to.match(/^group:(.+)$/);
+        const userMatch = to.match(/^user:(.+)$/);
+        const chatId = groupMatch?.[1] || userMatch?.[1];
+
+        if (!chatId) {
+          return { ok: false, error: `无效的目标: ${to}` };
+        }
+
+        const receiveIdType = groupMatch ? 'chat_id' : 'open_id';
+
+        try {
+          // 上传并发送文件
+          const { fileKey, fileName: uploadedName } = await uploadFile(fileUrl, fileName);
+          await activeClient.im.message.create({
+            data: {
+              receive_id: chatId,
+              content: JSON.stringify({ file_key: fileKey }),
+              msg_type: 'file',
+            },
+            params: { receive_id_type: receiveIdType },
+          });
+
+          // 如果有文字说明也发送
+          if (text) {
+            await activeClient.im.message.create({
+              data: {
+                receive_id: chatId,
+                content: JSON.stringify({ text }),
+                msg_type: 'text',
+              },
+              params: { receive_id_type: receiveIdType },
+            });
+          }
+
+          return { ok: true, channel: 'feishu', to, fileName: uploadedName };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           return { ok: false, error: message };
